@@ -69,6 +69,9 @@ model Employee {
   arlId         String
   epsId         String
   pensionFundId String
+
+  terminationDate DateTime?  @db.Timestamp(6)
+  
   arl           Arl         @relation(fields: [arlId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   eps           Eps         @relation(fields: [epsId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   pensionFund   PensionFund @relation(fields: [pensionFundId], references: [id], onDelete: Restrict, onUpdate: Cascade)

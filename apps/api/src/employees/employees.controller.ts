@@ -14,6 +14,20 @@ import { Res } from '@nestjs/common';
 export class EmployeesController {
   constructor(private employees: EmployeesService) { }
 
+  @Get(':id/certificate')
+  async getLaborCertificate(
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const { buffer, contentType, filename } =
+      await this.employees.generateLaborCertificatePdf(id);
+
+    res.setHeader('Content-Type', contentType);
+    const enc = encodeURIComponent(filename);
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"; filename*=UTF-8''${enc}`);
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
+    return res.send(buffer);
+  }
 
   @Get('export')
   async export(@Res() res: Response, @Query('search') search?: string) {
@@ -52,5 +66,6 @@ export class EmployeesController {
 
   @Get(':id/payroll-preview')
   payroll(@Param('id') id: string) { return this.employees.payrollPreview(id); }
+
 
 }

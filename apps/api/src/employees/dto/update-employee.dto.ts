@@ -1,4 +1,4 @@
-import { IsEnum, IsNumberString, IsOptional, IsString } from 'class-validator';
+import { IsDateString, IsEnum, IsNumberString, IsOptional, IsString } from 'class-validator';
 import { BloodType } from '@prisma/client';
 
 export class UpdateEmployeeDto {
@@ -11,4 +11,7 @@ export class UpdateEmployeeDto {
   @IsString() @IsOptional() arlId?: string;
   @IsString() @IsOptional() epsId?: string;
   @IsString() @IsOptional() pensionFundId?: string;
+  @IsOptional()
+  @IsDateString()
+  terminationDate?: string;
 }

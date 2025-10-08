@@ -9,11 +9,16 @@ export const employeeSchema = z.object({
   lastName: z.string().min(2, 'Mínimo 2 caracteres'),
   nationalId: z.string().min(5, 'Cédula inválida'),
   bloodType: z.enum(bloodTypes, { message: 'Tipo de sangre inválido' }),
-  phone: z.string().min(7, 'Teléfono inválido'),
+  phone: z.string().min(1, 'Teléfono inválido'),
   salary: z.string().refine(v => !isNaN(Number(v)) && Number(v) > 0, 'Salario inválido'),
   arlId: z.string().uuid('ARL requerida'),
   epsId: z.string().uuid('EPS requerida'),
   pensionFundId: z.string().uuid('Fondo requerido'),
-});
+  terminationDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha inválida (YYYY-MM-DD)')
+    .optional()
+    .or(z.literal('')),
+}); 
 
 export type EmployeeFormValues = z.infer<typeof employeeSchema>;

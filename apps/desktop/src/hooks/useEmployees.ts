@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { api, authHeaders } from '../lib/api'
+import { useEffect, useMemo, useState, useCallback } from 'react'
+import { api, authHeaders, getEmployeeCertificate } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
 
@@ -25,6 +25,13 @@ type ListResponse = {
     pages: number
 }
 
+function sanitizeForFile(name: string) {
+  return name
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9-_ ]/g, '')
+    .trim().replace(/\s+/g, '_');
+}
+
 export function useEmployees(initialSize = 10) {
     const { token } = useAuth()
     const [search, setSearch] = useState('')
@@ -35,6 +42,12 @@ export function useEmployees(initialSize = 10) {
     const [error, setError] = useState<string | null>(null)
 
     const params = useMemo(() => ({ search, page, size }), [search, page, size])
+
+    const [certOpen, setCertOpen] = useState(false);
+    const [certUrl, setCertUrl] = useState<string | null>(null);
+    const [certFilename, setCertFilename] = useState('certificado.pdf');
+    const [certEmployeeName, setCertEmployeeName] = useState<string>('');
+    const [openingId, setOpeningId] = useState<string | null>(null);
 
     async function fetchEmployees() {
         setLoading(true); setError(null)
@@ -50,7 +63,7 @@ export function useEmployees(initialSize = 10) {
     }
 
     useEffect(() => {
-        if (token) fetchEmployees() 
+        if (token) fetchEmployees()
     }, [search, page, size, token])
 
     async function exportExcel() {
@@ -71,5 +84,39 @@ export function useEmployees(initialSize = 10) {
         );
     }
 
-    return { data, loading, error, search, setSearch, page, setPage, size, setSize, exportExcel, refresh: fetchEmployees }
+    const openCertificate = useCallback(async (id: string, token: string, fullName: string) => {
+        setCertEmployeeName(fullName);
+        await toast.promise(
+            (async () => {
+                setOpeningId(id);
+                const { blob, filename } = await getEmployeeCertificate(token, id);
+                const url = URL.createObjectURL(blob);
+                // ocultar toolbar: const url = URL.createObjectURL(blob) + '#toolbar=0&navpanes=0';
+                setCertUrl(url);
+                setCertFilename(filename && filename.toLowerCase().endsWith('.pdf')
+                    ? filename
+                    : `certificado-${sanitizeForFile(fullName)}.pdf`
+                );
+                setCertOpen(true);
+            })(),
+            {
+                loading: 'Generando certificado…',
+                success: 'Certificado listo',
+                error: 'No se pudo generar el certificado',
+            }
+        ).finally(() => setOpeningId(null));
+    }, []);
+
+    const closeCertificate = useCallback(() => {
+        setCertOpen(false);
+        if (certUrl) {
+            URL.revokeObjectURL(certUrl);
+            setCertUrl(null);
+        }
+    }, [certUrl]);
+
+    return {
+        data, loading, error, search, setSearch, page, setPage, size, setSize, exportExcel, refresh: fetchEmployees, openCertificate, closeCertificate,
+    certOpen, certUrl, certFilename, certEmployeeName, openingId,
+    }
 }

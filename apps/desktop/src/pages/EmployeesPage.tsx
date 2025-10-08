@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import toast from 'react-hot-toast'
-import { PlusIcon, SearchIcon, FileSpreadsheetIcon, Loader2 } from 'lucide-react'
+import { PlusIcon, SearchIcon, FileSpreadsheetIcon, Loader2, FileTextIcon } from 'lucide-react'
 
 import Table from '../components/Table'
 import EmployeeForm from './employees/EmployeeForm'
@@ -19,7 +19,8 @@ import { formatCurrency } from '../utils/calculations'
 
 
 export default function EmployeesPage() {
-  const { data, loading, error, search, setSearch, page, setPage, size, setSize, exportExcel, refresh } = useEmployees(10)
+  const { data, loading, error, search, setSearch, page, setPage, size, setSize, exportExcel, refresh,
+    openCertificate, closeCertificate, certOpen, certUrl, certFilename, certEmployeeName, openingId } = useEmployees(10)
 
   const { token } = useAuth();
   const [editing, setEditing] = useState<{ id: string; defaults: Partial<EmployeeFormValues> } | null>(null);
@@ -32,6 +33,7 @@ export default function EmployeesPage() {
   const canCreate = useCan('employee.create')
   const canUpdate = useCan('employee.update')
   const canDelete = useCan('employee.delete')
+
 
 
   async function handleCreate(values: EmployeeFormValues) {
@@ -80,6 +82,28 @@ export default function EmployeesPage() {
     { key: 'arl', header: 'ARL', render: (r: any) => r.arl?.name },
     { key: 'eps', header: 'EPS', render: (r: any) => r.eps?.name },
     { key: 'pensionFund', header: 'Fondo', render: (r: any) => r.pensionFund?.name },
+
+    {
+      key: 'status',
+      header: 'Estado',
+      render: (r: any) => {
+        const t = r.terminationDate ? new Date(r.terminationDate) : null;
+        const today = new Date();
+        const inactive = t && t <= new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        return <span className={inactive ? 'text-red-600' : 'text-green-700'}>
+          {inactive ? 'Inactivo' : 'Activo'}
+        </span>;
+      }
+    },
+
+    {
+      key: 'terminationDate',
+      header: 'Fecha retiro',
+      render: (r: any) => r.terminationDate
+        ? new Date(r.terminationDate).toLocaleDateString('es-CO')
+        : '—'
+    },
+
     {
       key: 'actions', header: 'Acciones', render: (r: any) => (
         <div className="flex space-x-2">
@@ -99,6 +123,7 @@ export default function EmployeesPage() {
                   arlId: r.arl?.id,
                   epsId: r.eps?.id,
                   pensionFundId: r.pensionFund?.id,
+                  terminationDate: r.terminationDate ? String(r.terminationDate).slice(0, 10) : '',
                 }
               })}
             >Editar</Button>
@@ -118,6 +143,17 @@ export default function EmployeesPage() {
             onClick={() => { setSelectedEmployee(r); setIsDeductionsOpen(true) }}
           >
             Ver deducciones
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={openingId === r.id}
+            onClick={() => openCertificate(r.id, token ?? '', `${r.firstName} ${r.lastName}`)}
+            title="Ver certificado laboral"
+          >
+            <FileTextIcon className="mr-2 h-4 w-4" />
+            {openingId === r.id ? 'Abriendo…' : 'Certificado'}
           </Button>
         </div>
       )
@@ -225,6 +261,45 @@ export default function EmployeesPage() {
         <p className="text-gray-700">
           ¿Está seguro que desea eliminar a <strong>{deleting?.fullName}</strong>? Esta acción no se puede deshacer.
         </p>
+      </Modal>
+
+      <Modal
+        isOpen={certOpen}
+        onClose={closeCertificate}
+        title={`Certificado laboral – ${certEmployeeName || ''}`}
+        footer={
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (!certUrl) return;
+                const a = document.createElement('a');
+                a.href = certUrl;
+                a.download = certFilename;  // ← nombre desde backend
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+              }}
+            >
+              Descargar
+            </Button>
+            <Button variant="outline" onClick={closeCertificate}>Cerrar</Button>
+          </div>
+        }
+      >
+        <div className="h-[80vh] w-full">
+          {certUrl ? (
+            <iframe
+              src={certUrl}
+              title="Certificado laboral"
+              className="h-full w-full rounded-md border"
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center text-gray-500">
+              Cargando…
+            </div>
+          )}
+        </div>
       </Modal>
 
       <DeductionsView

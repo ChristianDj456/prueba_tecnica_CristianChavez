@@ -5,7 +5,15 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import ExcelJS = require('exceljs');
+import PDFDocument = require('pdfkit');
 
+
+function sanitizeFileName(name: string) {
+  return name
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9-_ ]/g, '')
+    .trim().replace(/\s+/g, '_');
+}
 
 @Injectable()
 export class EmployeesService {
@@ -65,6 +73,7 @@ export class EmployeesService {
         bloodType: dto.bloodType,
         phone: dto.phone,
         salary: dto.salary,
+        terminationDate: dto.terminationDate ? new Date(dto.terminationDate) : null,
         arlId: dto.arlId,
         epsId: dto.epsId,
         pensionFundId: dto.pensionFundId,
@@ -80,6 +89,7 @@ export class EmployeesService {
         data: {
           ...dto,
           salary: dto.salary ?? undefined,
+          terminationDate: dto.terminationDate ? new Date(dto.terminationDate) : null,
         },
       });
     } catch {
@@ -155,6 +165,8 @@ export class EmployeesService {
       { header: 'Pen. Empl. (4%)', key: 'empPen', width: 16, style: { numFmt: '#,##0.00' } },
       { header: 'Pen. Empr. (4%)', key: 'emprPen', width: 16, style: { numFmt: '#,##0.00' } },
       { header: 'Neto Empleado', key: 'net', width: 16, style: { numFmt: '#,##0.00' } },
+      { header: 'Total Costo Empleador', key: 'total', width: 20, style: { numFmt: '#,##0.00' } },
+      { header: 'Fecha Retiro', key: 'terminationDate', width: 20 },
       { header: 'Creado', key: 'createdAt', width: 19 },
     ];
 
@@ -168,7 +180,9 @@ export class EmployeesService {
       const emprEps = salary.mul(0.04);
       const empPen = salary.mul(0.04);
       const emprPen = salary.mul(0.04);
+      const arl = salary.mul(0.00522);
       const net = salary.minus(empEps.plus(empPen));
+      const totalCost = salary.plus(emprEps).plus(emprPen).plus(arl);
 
       ws.addRow({
         id: e.id,
@@ -186,6 +200,10 @@ export class EmployeesService {
         empPen: Number(empPen.toFixed(2)),
         emprPen: Number(emprPen.toFixed(2)),
         net: Number(net.toFixed(2)),
+        total: Number(totalCost.toFixed(2)), 
+        terminationDate: e.terminationDate
+    ? e.terminationDate.toISOString().slice(0, 19).replace('T', ' ')
+    : 'Activo',
         createdAt: e.createdAt.toISOString().slice(0, 19).replace('T', ' '),
       });
     }
@@ -202,4 +220,103 @@ export class EmployeesService {
     const buffer = await wb.xlsx.writeBuffer();
     return buffer;
   }
+
+
+  async generateLaborCertificatePdf(id: string): Promise<{
+    filename: string;
+    buffer: Buffer;
+    contentType: string;
+  }> {
+    const emp = await this.get(id);
+
+    const today = new Date();
+    let status = 'ACTIVO';
+    let inactiveDays = 0;
+
+    if (emp.terminationDate && emp.terminationDate <= today) {
+      status = 'INACTIVO';
+      const diffMs = today.getTime() - emp.terminationDate.getTime();
+      inactiveDays = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+    }
+
+    const fmtCurrency = (v: any) =>
+      new Intl.NumberFormat('es-CO', {
+        style: 'currency',
+        currency: 'COP',
+        maximumFractionDigits: 0,
+      }).format(Number(v));
+
+    const fmtDate = (d?: Date | null) =>
+      d ? new Intl.DateTimeFormat('es-CO', { dateStyle: 'long' }).format(d) : 'N/A';
+
+    // --- Construcción del PDF ---
+    const doc = new PDFDocument({ margin: 50 });
+    const chunks: Buffer[] = [];
+
+    // recolectar en buffer
+    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+    const bufferPromise = new Promise<Buffer>((resolve) => {
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+    });
+
+    // Encabezado / datos de la empresa
+    const company = {
+      name: 'ACME S.A.S.',
+      nit: '900.123.456-7',
+      address: 'Calle 123 #45-67, Bogotá D.C.',
+    };
+
+    // Contenido
+    doc.fontSize(16).text('CERTIFICADO LABORAL', { align: 'center' });
+    doc.moveDown(1);
+
+    doc.fontSize(10).text(company.name);
+    doc.text(`NIT: ${company.nit}`);
+    doc.text(`Dirección: ${company.address}`);
+    doc.text(`Fecha de emisión: ${fmtDate(today)}`);
+    doc.moveDown(1.2);
+
+    const fullName = `${emp.firstName} ${emp.lastName}`.trim();
+    const paragraph =
+      status === 'ACTIVO'
+        ? `Por medio de la presente se certifica que el(la) señor(a) ${fullName}, identificado(a) con cédula de ciudadanía No. ${emp.nationalId}, labora actualmente en ${company.name} a la fecha de emisión de este certificado.`
+        : `Por medio de la presente se certifica que el(la) señor(a) ${fullName}, identificado(a) con cédula de ciudadanía No. ${emp.nationalId}, laboró en ${company.name} hasta el ${fmtDate(emp.terminationDate)}. A la fecha, acumula ${inactiveDays} día(s) de inactividad.`;
+
+    doc.fontSize(12).text(paragraph, { align: 'justify' });
+    doc.moveDown(0.8);
+
+    doc.fontSize(11).text(`Estado: ${status}`);
+    doc.text(`Salario: ${fmtCurrency(emp.salary)}`);
+    doc.text(`Fecha de ingreso: ${fmtDate(emp.createdAt)}`);
+    doc.text(`Fecha de retiro: ${fmtDate(emp.terminationDate ?? null)}`);
+    doc.text(`EPS: ${emp.eps?.name ?? 'N/A'}`);
+    doc.text(`ARL: ${emp.arl?.name ?? 'N/A'}`);
+    doc.text(`Fondo de Pensiones: ${emp.pensionFund?.name ?? 'N/A'}`);
+    doc.moveDown(1);
+
+    doc.fontSize(10).text(
+      'Este certificado se expide a solicitud del interesado para los fines que considere pertinentes.',
+      { align: 'justify' },
+    );
+
+    doc.moveDown(3);
+    doc.text('Atentamente,').moveDown(2);
+    doc.text('____________________________');
+    doc.text(`Recursos Humanos - ${company.name}`);
+
+    doc.end();
+
+    const buffer = await bufferPromise;
+
+    const pretty = sanitizeFileName(fullName);
+    const filename = `certificado-${pretty}.pdf`;   
+
+
+    return {
+      filename,
+      buffer,
+      contentType: 'application/pdf',
+    };
+  }
+
 }

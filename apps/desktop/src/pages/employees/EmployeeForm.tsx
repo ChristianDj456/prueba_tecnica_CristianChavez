@@ -22,6 +22,7 @@ export default function EmployeeForm({ defaultValues, onSubmit, onCancel, submit
       firstName: '', lastName: '', nationalId: '',
       bloodType: 'O_POS', phone: '', salary: '',
       arlId: '', epsId: '', pensionFundId: '',
+      terminationDate: '',
       ...defaultValues,
     },
   });
@@ -87,7 +88,7 @@ export default function EmployeeForm({ defaultValues, onSubmit, onCancel, submit
                 name={field.name}
                 value={field.value}
                 onChange={field.onChange}
-                options={[ ...arl.map(a => ({ value: a.id, label: a.name }))]}
+                options={[...arl.map(a => ({ value: a.id, label: a.name }))]}
                 disabled={loadingCats}
               />
             )}
@@ -104,7 +105,7 @@ export default function EmployeeForm({ defaultValues, onSubmit, onCancel, submit
                 name={field.name}
                 value={field.value}
                 onChange={field.onChange}
-                options={[ ...eps.map(e => ({ value: e.id, label: e.name }))]}
+                options={[...eps.map(e => ({ value: e.id, label: e.name }))]}
                 disabled={loadingCats}
               />
             )}
@@ -121,12 +122,20 @@ export default function EmployeeForm({ defaultValues, onSubmit, onCancel, submit
                 name={field.name}
                 value={field.value}
                 onChange={field.onChange}
-                options={[ ...pf.map(p => ({ value: p.id, label: p.name }))]}
+                options={[...pf.map(p => ({ value: p.id, label: p.name }))]}
                 disabled={loadingCats}
               />
             )}
           />
           {errors.pensionFundId && <small className="text-red-600">{errors.pensionFundId.message}</small>}
+        </div>
+        <div>
+          <label>Fecha de retiro (opcional)</label>
+          <Input type="date" {...register('terminationDate')} />
+          {errors.terminationDate && (
+            <small className="text-red-600">{errors.terminationDate.message as any}</small>
+          )}
+          <p className="mt-1 text-xs text-gray-500">Déjalo vacío si está activo.</p>
         </div>
       </div>
 

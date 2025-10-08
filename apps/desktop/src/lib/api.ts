@@ -68,5 +68,29 @@ export async function getPayrollPreview(token: string | null, id: string) {
     }
 }
 
+export async function getEmployeeCertificate(token: string, id: string) {
+  const resp = await fetch(`${import.meta.env.VITE_API_URL}/employees/${id}/certificate`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`Error ${resp.status}: ${text}`);
+  }
+
+  console.log("Respuesta cruda ->", resp);
+  const cd = resp.headers.get('content-disposition') || '';
+
+  const m = /filename\*=UTF-8''([^;]+)|filename="?([^"]+)"?/i.exec(cd || '');
+  const filename = decodeURIComponent(m?.[1] || m?.[2] || `certificado.pdf`);
+  console.log({ filename });
+
+  const blob = await resp.blob();
+  return { blob, filename };
+}
+
 
 
