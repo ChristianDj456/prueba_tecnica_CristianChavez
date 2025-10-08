@@ -15,6 +15,7 @@ function sanitizeFileName(name: string) {
     .trim().replace(/\s+/g, '_');
 }
 
+
 @Injectable()
 export class EmployeesService {
   constructor(private prisma: PrismaService) { }
@@ -174,6 +175,14 @@ export class EmployeesService {
     header.font = { bold: true };
     header.alignment = { vertical: 'middle' };
 
+    const fmtDate = (d?: Date | null) => {
+      if (!d) return 'Activo';
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      return `${day}/${month}/${year}`;
+    };
+
     for (const e of rows) {
       const salary = new Decimal(e.salary);
       const empEps = salary.mul(0.04);
@@ -200,10 +209,8 @@ export class EmployeesService {
         empPen: Number(empPen.toFixed(2)),
         emprPen: Number(emprPen.toFixed(2)),
         net: Number(net.toFixed(2)),
-        total: Number(totalCost.toFixed(2)), 
-        terminationDate: e.terminationDate
-    ? e.terminationDate.toISOString().slice(0, 19).replace('T', ' ')
-    : 'Activo',
+        total: Number(totalCost.toFixed(2)),
+        terminationDate: fmtDate(e.terminationDate ?? null),
         createdAt: e.createdAt.toISOString().slice(0, 19).replace('T', ' '),
       });
     }
@@ -309,7 +316,7 @@ export class EmployeesService {
     const buffer = await bufferPromise;
 
     const pretty = sanitizeFileName(fullName);
-    const filename = `certificado-${pretty}.pdf`;   
+    const filename = `certificado-${pretty}.pdf`;
 
 
     return {
